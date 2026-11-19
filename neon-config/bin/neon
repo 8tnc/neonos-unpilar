@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+_aqui = os.path.dirname(os.path.realpath(__file__))
+_repo = os.path.abspath(os.path.join(_aqui, "..", "python"))
+if os.path.isdir(os.path.join(_repo, "neon")):
+    sys.path.insert(0, _repo)
+    os.environ.setdefault("NEON_HOME", os.path.abspath(os.path.join(_aqui, "..")))
+else:
+    sys.path.insert(0, "/usr/local/lib/neon")
+
+from neon.cli import main
+
+sys.exit(main())

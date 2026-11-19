@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -u
+
+NEON_HOME="${NEON_HOME:-/usr/local/share/neon}"
+if [ ! -r "$NEON_HOME/lib/theme.sh" ]; then
+    echo "neon-bootseq: no se encuentra $NEON_HOME/lib/theme.sh" >&2
+    exit 1
+fi
+. "$NEON_HOME/lib/theme.sh"
+
+skip=false
+[ "${1:-}" = "--fast" ] && skip=true
+cols=$(tput cols 2>/dev/null || echo 80)
+[ "$cols" -gt 100 ] && cols=100
+
+pause() {
+    $skip && return 0
+    if [ -t 0 ]; then
+        read -rsn1 -t "$1" && skip=true
+    else
+        sleep "$1"
+    fi
+    return 0
+}
+
+type_out() {
+    local s=$1 i
+    for ((i = 0; i < ${#s}; i++)); do
+        printf '%s' "${s:i:1}"
+        pause 0.012
+    done
+    printf '\n'
+}
+
+hr() { printf '%s%s%s\n' "$NEON_RED" "$(printf '═%.0s' $(seq "$cols"))" "$NEON_RESET"; }
+
+
+chk_root() {
+    local src fs opts
+    read -r src fs opts < <(findmnt -no SOURCE,FSTYPE,OPTIONS / 2>/dev/null) || { echo "no se pudo leer /"; return 1; }
+    echo "$src ($fs, ${opts%%,*})"
+    [ "${opts%%,*}" = "rw" ]
+}
+
+chk_mem() {
+    free -m 2>/dev/null | awk '/^Mem:/ { printf "%d MiB libres de %d MiB\n", $7, $2; ok=1 } END { exit !ok }'
+}
+
+chk_net() {
+    local dev ip
+    dev=$(ip route show default 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }')
+    [ -n "$dev" ] || { echo "sin ruta por defecto"; return 1; }
+    ip=$(ip -4 -o addr show dev "$dev" 2>/dev/null | awk '{ split($4, a, "/"); print a[1]; exit }')
+    echo "$dev ${ip:-sin IPv4}"
+}
+
+chk_dns() {
+    if timeout 3 getent hosts deb.debian.org >/dev/null 2>&1; then
+        echo "deb.debian.org resuelto"
+    else
+        echo "sin resolución DNS"
+        return 1
+    fi
+}
+
+chk_units() {
+    local n
+    command -v systemctl >/dev/null 2>&1 || { echo "systemctl no disponible"; return 1; }
+    n=$(systemctl --failed --no-legend --plain 2>/dev/null | wc -l)
+    echo "$n servicios con fallo"
+    [ "$n" -eq 0 ]
+}
+
+step() {
+    local label=$1 fn=$2 out rc tmp frames='|/-\' i=0
+    tmp=$(mktemp)
+    "$fn" > "$tmp" 2>/dev/null &
+    local pid=$!
+    while kill -0 "$pid" 2>/dev/null || [ "$i" -lt 8 ]; do
+        printf '\r%s[%s]%s %s %s' "$NEON_GRAY" "${frames:i % 4:1}" "$NEON_RESET" "$label" "${frames:i % 4:1}"
+        i=$((i + 1))
+        pause 0.07
+        $skip && break
+    done
+    wait "$pid"; rc=$?
+    out=$(head -n1 "$tmp"); rm -f "$tmp"
+    printf '\r%s[  ]%s %s  \n' "$NEON_GRAY" "$NEON_RESET" "$label"
+    if [ "$rc" -eq 0 ]; then
+        printf '%s[OK]%s %s\n\n' "$NEON_WHITE" "$NEON_RESET" "$out"
+    else
+        printf '%s[!!]%s %s\n\n' "$NEON_RED_B" "$NEON_RESET" "$out"
+    fi
+    pause 0.15
+}
+
+scan() {
+    printf '%sIndexando sistema de archivos...%s\n' "$NEON_WHITE" "$NEON_RESET"
+    local dirs d
+    mapfile -t dirs < <(find /etc /usr/lib /usr/share -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | head -n 40)
+    for d in "${dirs[@]}"; do
+        printf '%s%s%s\n' "$NEON_RED" "$d" "$NEON_RESET"
+        pause 0.015
+    done
+    echo
+}
+
+glitch() {
+    $skip && return 0
+    local chars='!"#$%&()*+,-./:;<=>?@[]^_{|}~0123456789ABCDEFabcdef░▒▓█▀▄' line n i j
+    for ((i = 0; i < 6; i++)); do
+        line=""
+        n=$((RANDOM % (cols - 10) + 10))
+        for ((j = 0; j < n; j++)); do line+="${chars:RANDOM % ${#chars}:1}"; done
+        printf '%s%s%s\n' "$NEON_RED" "$line" "$NEON_RESET"
+        pause 0.04
+    done
+    printf '%s R E   B O O T %s\n' "$NEON_RED_B" "$NEON_RESET"
+    pause 0.3
+}
+
+
+printf '\033[H\033[2J'
+hr
+printf '  %sARASAKA INC // NEON//OS%s\n' "$NEON_WHITE" "$NEON_RESET"
+printf '  %sSecuencia de arranque · verificación de integridad%s\n' "$NEON_GRAY" "$NEON_RESET"
+hr
+printf '  v%s, %s\n\n' "$NEON_VERSION" "$(date '+%Y-%m-%d %H:%M')"
+type_out "Nodo: $(hostname) · Kernel: $(uname -r)"
+echo
+pause 0.4
+
+step "Verificando sistema de archivos raíz" chk_root
+step "Comprobando memoria disponible"       chk_mem
+step "Estableciendo enlace de red"          chk_net
+step "Resolviendo nodo externo"             chk_dns
+step "Auditando servicios del sistema"      chk_units
+
+scan
+glitch
+
+printf '\n'
+type_out " _> Enlace establecido con $(hostname)."
+type_out " _> Operador: identifíquese para continuar..."
+pause 1.2
+printf '\033[H\033[2J'

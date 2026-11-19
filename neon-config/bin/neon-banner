@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -u
+
+NEON_HOME="${NEON_HOME:-/usr/local/share/neon}"
+if [ ! -r "$NEON_HOME/lib/theme.sh" ]; then
+    echo "neon-banner: no se encuentra $NEON_HOME/lib/theme.sh (¿falta instalar NEON//OS?)" >&2
+    exit 1
+fi
+. "$NEON_HOME/lib/theme.sh"
+
+
+os_name() {
+    local PRETTY_NAME=""
+    [ -r /etc/os-release ] && . /etc/os-release
+    echo "${PRETTY_NAME:-desconocido}"
+}
+
+uptime_es() {
+    local secs
+    read -r secs _ < /proc/uptime 2>/dev/null || { echo "desconocido"; return; }
+    secs=${secs%.*}
+    printf '%dd %dh %dm' $((secs / 86400)) $((secs % 86400 / 3600)) $((secs % 3600 / 60))
+}
+
+memory() {
+    free -m 2>/dev/null | awk '/^Mem:/ { printf "%d MiB / %d MiB", $3, $2; found=1 } END { if (!found) print "desconocida" }'
+}
+
+ipv4() {
+    local ip
+    ip=$(ip -4 -o addr show scope global 2>/dev/null | awk '{ split($4, a, "/"); print a[1]; exit }')
+    echo "${ip:-sin conexión}"
+}
+
+
+sep="${NEON_RED}$(printf '─%.0s' {1..38})${NEON_RESET}"
+row() { printf '%s%-8s%s %s' "$NEON_GRAY" "$1" "$NEON_RESET" "$2"; }
+
+right=(
+    ""
+    ""
+    "${NEON_WHITE}A R A S A K A   C O R P O R A T I O N${NEON_RESET}"
+    "${NEON_GRAY}NEON//OS v${NEON_VERSION} · consola corporativa${NEON_RESET}"
+    "$sep"
+    "$(row NODO    "$(hostname)")"
+    "$(row USUARIO "$(id -un)")"
+    "$(row SISTEMA "$(os_name)")"
+    "$(row KERNEL  "$(uname -r)")"
+    "$(row ACTIVO  "$(uptime_es)")"
+    "$(row MEMORIA "$(memory)")"
+    "$(row RED     "$(ipv4)")"
+    "$(row FECHA   "$(date '+%Y-%m-%d %H:%M')")"
+    "$sep"
+)
+
+emblem="$NEON_HOME/assets/ascii/emblem.txt"
+if [ -r "$emblem" ]; then
+    mapfile -t left < "$emblem"
+else
+    left=()
+fi
+
+lines=$(( ${#left[@]} > ${#right[@]} ? ${#left[@]} : ${#right[@]} ))
+echo
+for ((i = 0; i < lines; i++)); do
+    printf ' %s%s%s  %s\n' "$NEON_RED_B" "${left[i]:-}" "$NEON_RESET" "${right[i]:-}"
+done
+echo

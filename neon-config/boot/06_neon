@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+EMBLEM=/usr/local/share/neon/assets/ascii/emblem-ascii.txt
+
+cat <<'EOF'
+### NEON//OS: colores (texto/fondo) ###
+set menu_color_normal=light-red/black
+set menu_color_highlight=white/red
+
+### NEON//OS: intro; cualquier tecla la salta ###
+clear
+set color_normal=light-red/black
+EOF
+
+if [ -r "$EMBLEM" ]; then
+    sed 's/.*/echo "&"/' "$EMBLEM"
+fi
+
+cat <<'EOF'
+set color_normal=light-gray/black
+echo "   ARASAKA BOOTLOADER  //  NEON//OS"
+echo "   ------------------------------------"
+echo "   Plataforma : ${grub_cpu}-${grub_platform}"
+echo "   Particion  : ${root}"
+echo "   > Transfiriendo control al menu de arranque..."
+sleep --interruptible 2
+set color_normal=light-red/black
+EOF

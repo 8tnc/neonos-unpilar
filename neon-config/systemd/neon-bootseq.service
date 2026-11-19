@@ -1,0 +1,19 @@
+[Unit]
+Description=NEON//OS secuencia de arranque
+After=systemd-user-sessions.service network.target
+Before=getty@tty1.service
+ConditionKernelCommandLine=!neon.noboot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/neon-bootseq
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+Environment=TERM=linux
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target
